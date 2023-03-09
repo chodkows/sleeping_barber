@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        mpsc::{channel, Receiver},
+        mpsc::{channel, sync_channel, Receiver},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -9,7 +9,7 @@ use std::{
 
 const HAIR_CUT_TIME: Duration = Duration::from_secs(3);
 const BARBER_NAP: Duration = Duration::from_secs(1);
-const BARBERS: usize = 3;
+const BARBERS: usize = 2;
 
 fn get_client(client_channel: &Arc<Mutex<Receiver<String>>>) -> Option<String> {
     let client_channel = client_channel.lock().ok().unwrap();
@@ -28,14 +28,26 @@ fn barber(
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         println!("{} goes to the waiting room and check for clients", barber);
+        let mut is_sleeping = false;
         loop {
             if let Some(client) = get_client(&client_channel) {
-                println!("{} is cutting {}'s hair", barber, client);
-                thread::sleep(HAIR_CUT_TIME);
-                println!("{} is finnished cutting {}'s hair", barber, client);
+                if !is_sleeping {
+                    println!("{} is cutting {}'s hair", barber, client);
+                    thread::sleep(HAIR_CUT_TIME);
+                    println!("{} is finnished cutting {}'s hair", barber, client);
+                } else {
+                    println!("{} wakes {} up", client, barber);
+                    is_sleeping = false;
+                    println!("{} is cutting {}'s hair", barber, client);
+                    thread::sleep(HAIR_CUT_TIME);
+                    println!("{} is finnished cutting {}'s hair", barber, client);
+                }
             } else {
-                println!("{} gone to a nap", barber);
-                thread::sleep(BARBER_NAP);
+                if !is_sleeping {
+                    println!("{} gone to a nap", barber);
+                    is_sleeping = true;
+                    thread::sleep(BARBER_NAP);
+                }
             }
 
             if barbers_done.lock().ok().unwrap().try_recv().is_ok() {
@@ -46,11 +58,16 @@ fn barber(
 }
 
 fn main() {
-    let (client_tx, client_rx) = channel::<String>();
+    println!("The sleeping barber problem");
+    println!("---------------------------");
+    //let (client_tx, client_rx) = channel::<String>();
+    let (client_tx, client_rx) = sync_channel::<String>(10);
     let (barber_tx, barber_rx) = channel();
     let client_rx = Arc::new(Mutex::new(client_rx));
     let barber_rx = Arc::new(Mutex::new(barber_rx));
     let mut handles = Vec::new();
+
+    println!("The shop is open for the day!");
 
     for i in 0..BARBERS {
         let handle = barber(
@@ -61,11 +78,13 @@ fn main() {
         handles.push(handle);
     }
 
-    for i in 0..10 {
-        client_tx
-            .send(format!("Client{}", i))
-            .ok()
-            .expect("Unable to send client");
+    for i in 0..100 {
+        if let Err(_) = client_tx.try_send(format!("Client{}", i)) {
+            println!(
+                "The waiting room is full, so {} leaves",
+                format!("Client{}", i)
+            );
+        }
         thread::sleep(Duration::from_secs(1));
     }
 
