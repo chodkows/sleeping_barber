@@ -9,8 +9,6 @@ use std::{
 
 use rand::Rng;
 
-const HAIR_CUT_TIME: Duration = Duration::from_secs(3);
-const BARBER_NAP: Duration = Duration::from_secs(1);
 const SHOP_OPEN: Duration = Duration::from_secs(60);
 const BARBERS: usize = 3;
 
@@ -36,23 +34,24 @@ fn barber(
         );
         let mut is_sleeping = false;
         loop {
+            let mut rng = rand::thread_rng();
+            let hair_cut_time = Duration::from_secs(rng.gen_range(2..4));
             if let Some(client) = get_client(&client_channel) {
                 if !is_sleeping {
                     println!("    {} is cutting {}'s hair", barber, client);
-                    thread::sleep(HAIR_CUT_TIME);
+                    thread::sleep(hair_cut_time);
                     println!("    {} is finnished cutting {}'s hair", barber, client);
                 } else {
                     println!("    {} wakes {} up", client, barber);
                     is_sleeping = false;
                     println!("    {} is cutting {}'s hair", barber, client);
-                    thread::sleep(HAIR_CUT_TIME);
+                    thread::sleep(hair_cut_time);
                     println!("    {} is finnished cutting {}'s hair", barber, client);
                 }
             } else {
                 if !is_sleeping {
                     println!("    {} gone to a nap", barber);
                     is_sleeping = true;
-                    thread::sleep(BARBER_NAP);
                 }
             }
 
@@ -99,7 +98,7 @@ fn main() {
         handles.push(handle);
     }
 
-    for i in 0..100 {
+    for i in 0..200 {
         let mut rng = rand::thread_rng();
         let random = rng.gen_range(0..2);
 
