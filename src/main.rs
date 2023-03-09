@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, Receiver},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -9,6 +9,7 @@ use std::{
 
 const HAIR_CUT_TIME: Duration = Duration::from_secs(3);
 const BARBER_NAP: Duration = Duration::from_secs(1);
+const BARBERS: usize = 3;
 
 fn barber(
     barber: String,
@@ -50,7 +51,7 @@ fn main() {
     let barber_rx = Arc::new(Mutex::new(barber_rx));
     let mut handles = Vec::new();
 
-    for i in 0..3 {
+    for i in 0..BARBERS {
         let handle = barber(
             format!("Barber{}", i),
             Arc::clone(&client_rx),
@@ -59,17 +60,20 @@ fn main() {
         handles.push(handle);
     }
 
-    for i in 0..100 {
+    for i in 0..10 {
         client_tx
             .send(format!("Client{}", i))
             .ok()
             .expect("Unable to send client");
         thread::sleep(Duration::from_secs(1));
     }
-    barber_tx
-        .send(true)
-        .ok()
-        .expect("Unable to send to barbers_done channel");
+
+    for _ in 0..BARBERS {
+        barber_tx
+            .send(true)
+            .ok()
+            .expect("Unable to send to barbers_done channel");
+    }
 
     handles
         .into_iter()
