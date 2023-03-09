@@ -11,6 +11,16 @@ const HAIR_CUT_TIME: Duration = Duration::from_secs(3);
 const BARBER_NAP: Duration = Duration::from_secs(1);
 const BARBERS: usize = 3;
 
+fn get_client(client_channel: &Arc<Mutex<Receiver<String>>>) -> Option<String> {
+    let client_channel = client_channel.lock().ok().unwrap();
+    let mut client_iter = client_channel.try_iter();
+    if let Some(client) = client_iter.next() {
+        Some(client)
+    } else {
+        None
+    }
+}
+
 fn barber(
     barber: String,
     client_channel: Arc<Mutex<Receiver<String>>>,
@@ -19,15 +29,6 @@ fn barber(
     thread::spawn(move || {
         println!("{} goes to the waiting room and check for clients", barber);
         loop {
-            fn get_client(client_channel: &Arc<Mutex<Receiver<String>>>) -> Option<String> {
-                let client_channel = client_channel.lock().ok().unwrap();
-                let mut client_iter = client_channel.try_iter();
-                if let Some(client) = client_iter.next() {
-                    Some(client)
-                } else {
-                    None
-                }
-            }
             if let Some(client) = get_client(&client_channel) {
                 println!("{} is cutting {}'s hair", barber, client);
                 thread::sleep(HAIR_CUT_TIME);
