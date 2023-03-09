@@ -8,29 +8,38 @@ use std::{
 };
 
 const HAIR_CUT_TIME: Duration = Duration::from_secs(3);
+const BARBER_NAP: Duration = Duration::from_secs(1);
 
 fn barber(
     barber: String,
     client_channel: Arc<Mutex<Receiver<String>>>,
-    barbers_done: Sender<bool>,
+    barbers_done: Arc<Mutex<Receiver<bool>>>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         println!("{} goes to the waiting room and check for clients", barber);
-        client_channel
-            .lock()
-            .ok()
-            .unwrap()
-            .recv()
-            .into_iter()
-            .for_each(|client| {
+        loop {
+            fn get_client(client_channel: &Arc<Mutex<Receiver<String>>>) -> Option<String> {
+                let client_channel = client_channel.lock().ok().unwrap();
+                let mut client_iter = client_channel.try_iter();
+                if let Some(client) = client_iter.next() {
+                    Some(client)
+                } else {
+                    None
+                }
+            }
+            if let Some(client) = get_client(&client_channel) {
                 println!("{} is cutting {}'s hair", barber, client);
                 thread::sleep(HAIR_CUT_TIME);
                 println!("{} is finnished cutting {}'s hair", barber, client);
-            });
-        barbers_done
-            .send(true)
-            .ok()
-            .expect("Unable to send to barbers_done channel");
+            } else {
+                println!("{} gone to a nap", barber);
+                thread::sleep(BARBER_NAP);
+            }
+
+            if barbers_done.lock().ok().unwrap().try_recv().is_ok() {
+                break;
+            }
+        }
     })
 }
 
@@ -38,13 +47,14 @@ fn main() {
     let (client_tx, client_rx) = channel::<String>();
     let (barber_tx, barber_rx) = channel();
     let client_rx = Arc::new(Mutex::new(client_rx));
+    let barber_rx = Arc::new(Mutex::new(barber_rx));
     let mut handles = Vec::new();
 
-    for i in 0..1 {
+    for i in 0..3 {
         let handle = barber(
             format!("Barber{}", i),
             Arc::clone(&client_rx),
-            barber_tx.clone(),
+            Arc::clone(&barber_rx),
         );
         handles.push(handle);
     }
@@ -56,6 +66,10 @@ fn main() {
             .expect("Unable to send client");
         thread::sleep(Duration::from_secs(1));
     }
+    barber_tx
+        .send(true)
+        .ok()
+        .expect("Unable to send to barbers_done channel");
 
     handles
         .into_iter()
